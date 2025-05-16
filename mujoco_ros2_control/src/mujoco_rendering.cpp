@@ -55,7 +55,7 @@ void MujocoRendering::init(mjModel *mujoco_model, mjData *mujoco_data)
   // create window, make OpenGL context current, request v-sync
   glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
   glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
-  window_ = glfwCreateWindow(1200, 900, "Demo", NULL, NULL);
+  window_ = glfwCreateWindow(600, 400, "Demo", NULL, NULL);
   glfwMakeContextCurrent(window_);
 
   // initialize visualization data structures
