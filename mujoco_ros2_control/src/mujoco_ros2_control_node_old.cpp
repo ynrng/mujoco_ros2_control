@@ -5,22 +5,15 @@
 #include "mujoco_ros2_control/mujoco_ros2_control.hpp"
 #include "mujoco_ros2_control/mujoco_rendering.hpp"
 
-#include "std_msgs/msg/string.hpp"
-#include "geometry_msgs/msg/pose_array.hpp"
-#include "geometry_msgs/msg/pose.hpp"
-
-
 // MuJoCo data structures
 mjModel* mujoco_model = nullptr;
 mjData* mujoco_data = nullptr;
-rclcpp::Node::SharedPtr node = nullptr;
 
 // main function
 int main(int argc, const char** argv) {
 
   rclcpp::init(argc, argv);
-  // std::shared_ptr<rclcpp::Node>
-  rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared("mujoco_ros2_control_node", rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
+  std::shared_ptr<rclcpp::Node> node = rclcpp::Node::make_shared("mujoco_ros2_control_node", rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
 
   RCLCPP_INFO_STREAM(node->get_logger(), "Initializing mujoco_ros2_control node...");
   auto model_path = node->get_parameter("mujoco_model_path").as_string();
@@ -50,9 +43,6 @@ int main(int argc, const char** argv) {
   rendering->init(node, mujoco_model, mujoco_data);
   RCLCPP_INFO_STREAM(node->get_logger(), "Mujoco rendering has been successfully initialized !");
 
-  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr xpos_publisher_;
-  xpos_publisher_ = node->create_publisher<geometry_msgs::msg::PoseArray>("/mjc/poses", 10);
-
   // run main loop, target real-time simulation and 60 fps rendering
   while (rclcpp::ok() && !rendering->is_close_flag_raised()) {
     // advance interactive simulation for 1/60 sec
@@ -64,39 +54,6 @@ int main(int argc, const char** argv) {
       control.update();
     }
     rendering->update();
-
-    // debug
-    // mj_printData(mujoco_model, mujoco_data, "/home/yan/code/assembly_ws/mjdata");
-    // mj_printModel(mujoco_model, "/home/yan/code/assembly_ws/mjmodel");
-
-    // publish xpos + xquat
-    {
-      std::vector<std::string> list_items = { "peg", "hole" };
-      auto pose_array = geometry_msgs::msg::PoseArray();
-      pose_array.header.stamp = node->now();
-      pose_array.header.frame_id = "world";
-
-      for (std::size_t i = 0; i < list_items.size(); i++) {
-        auto pose = geometry_msgs::msg::Pose();
-        int geom_id = mj_name2id(mujoco_model, mjOBJ_BODY, list_items[i].c_str());
-        if (geom_id == -1) {
-          RCLCPP_WARN(node->get_logger(), "Body '%s' not found!", list_items[i].c_str());
-        }
-        else {
-          pose.position.x = mujoco_data->xpos[3 * geom_id];
-          pose.position.y = mujoco_data->xpos[3 * geom_id + 1];
-          pose.position.z = mujoco_data->xpos[3 * geom_id + 2];
-          pose.orientation.w = mujoco_data->xquat[4 * geom_id];
-          pose.orientation.x = mujoco_data->xquat[4 * geom_id + 1];
-          pose.orientation.y = mujoco_data->xquat[4 * geom_id + 2];
-          pose.orientation.z = mujoco_data->xquat[4 * geom_id + 3];
-
-          pose_array.poses.push_back(pose);
-        }
-      }
-
-      xpos_publisher_->publish(pose_array);
-    }
   }
 
   rendering->close();
