@@ -32,8 +32,11 @@ void MujocoRendering::init(rclcpp::Node::SharedPtr & node, mjModel* mujoco_model
     mju_error("Could not initialize GLFW");
   }
 
+  int W = 800;
+  int H = 800;
+
   // create window, make OpenGL context current, request v-sync
-  window_ = glfwCreateWindow(800, 800, "Demo", NULL, NULL);
+  window_ = glfwCreateWindow(W, H, "Demo", NULL, NULL);
   glfwMakeContextCurrent(window_);
   glfwSwapInterval(1);
 
@@ -43,11 +46,30 @@ void MujocoRendering::init(rclcpp::Node::SharedPtr & node, mjModel* mujoco_model
   mjv_defaultScene(&mjv_scn_);
   mjr_defaultContext(&mjr_con_);
 
-  mjv_cam_.distance = 2.;
+  mjv_cam_.distance = 1.5;
+
+  // Get ID of the camera named "main"
+  int camid = mj_name2id(mj_model_, mjOBJ_CAMERA, "main");
+  if (camid == -1) {
+      std::cerr << "Camera 'main' not found!\n";
+  } else {
+      // Use this camera
+      mjv_cam_.type = mjCAMERA_FIXED;      // use a fixed camera defined in model
+      mjv_cam_.fixedcamid = camid;
+  }
 
   // create scene and context
   mjv_makeScene(mj_model_, &mjv_scn_, 2000);
   mjr_makeContext(mj_model_, &mjr_con_, mjFONTSCALE_150);
+
+
+  // allocate rgb and depth buffers
+  rgb = (unsigned char*)std::malloc(3*W*H);
+  depth = (float*)std::malloc(sizeof(float)*W*H);
+
+  if (!rgb || !depth) {
+    mju_error("Could not allocate buffers");
+  }
 
   // install GLFW mouse and keyboard callbacks
   glfwSetKeyCallback(window_, &MujocoRendering::keyboard_callback);
@@ -71,6 +93,10 @@ void MujocoRendering::update()
   mjv_updateScene(mj_model_, mj_data_, &mjv_opt_, NULL, &mjv_cam_, mjCAT_ALL, &mjv_scn_);
   mjr_render(viewport, &mjv_scn_, &mjr_con_);
 
+  // read rgb and depth buffers
+  mjr_readPixels(rgb, depth, viewport, &mjr_con_);
+
+
   // swap OpenGL buffers (blocking call due to v-sync)
   glfwSwapBuffers(window_);
 
@@ -78,16 +104,29 @@ void MujocoRendering::update()
   glfwPollEvents();
 }
 
+void MujocoRendering::get_camera_buffer(unsigned char** rgb_buffer, float** depth_buffer)
+{
+  *rgb_buffer = rgb;
+  *depth_buffer = depth;
+}
+
 void MujocoRendering::close()
 {
-  //free visualization storage
-  mjv_freeScene(&mjv_scn_);
+
+  std::free(rgb);
+  std::free(depth);
+
+  mj_deleteData(mj_data_);
+  mj_deleteModel(mj_model_);
   mjr_freeContext(&mjr_con_);
+  mjv_freeScene(&mjv_scn_);
 
   // terminate GLFW (crashes with Linux NVidia drivers)
-#if defined(__APPLE__) || defined(_WIN32)
-  glfwTerminate();
-#endif
+  #if defined(__APPLE__) || defined(_WIN32)
+    glfwTerminate();
+  #endif
+
+
 }
 
 void MujocoRendering::keyboard_callback(GLFWwindow* window, int key, int scancode, int act, int mods)

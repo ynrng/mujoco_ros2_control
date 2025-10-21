@@ -8,6 +8,7 @@
 #include "std_msgs/msg/string.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include "sensor_msgs/msg/image.hpp"
 
 
 // MuJoCo data structures
@@ -52,6 +53,14 @@ int main(int argc, const char** argv) {
 
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr xpos_publisher_;
   xpos_publisher_ = node->create_publisher<geometry_msgs::msg::PoseArray>("/mjc/poses", 10);
+  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr camera_pub;
+  camera_pub = node->create_publisher<sensor_msgs::msg::Image>("mjc/camera", 10);
+  rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr depth_pub;
+  depth_pub = node->create_publisher<sensor_msgs::msg::Image>("mjc/depth", 10);
+
+  unsigned char* rgb;
+  float* depth;
+
 
   // run main loop, target real-time simulation and 60 fps rendering
   while (rclcpp::ok() && !rendering->is_close_flag_raised()) {
@@ -69,9 +78,62 @@ int main(int argc, const char** argv) {
     // mj_printData(mujoco_model, mujoco_data, "/home/yan/code/assembly_ws/mjdata");
     // mj_printModel(mujoco_model, "/home/yan/code/assembly_ws/mjmodel");
 
+    // camera data
+    {
+
+        // unsigned char rgb[640 * 480 * 3];
+        // float depth[640 * 480];
+
+        rendering->get_camera_buffer(&rgb, &depth);
+
+        // Depth image message
+        auto depth_msg = sensor_msgs::msg::Image();
+        depth_msg.header.stamp = node->now();
+        depth_msg.header.frame_id = "camera";
+        depth_msg.height = 800;
+        depth_msg.width = 800;
+        depth_msg.encoding = "32FC1";
+        depth_msg.is_bigendian = false;
+        depth_msg.step = 800 * sizeof(float);
+        // Copy depth buffer to msg.data
+        depth_msg.data.resize(800 * 800 * sizeof(float));
+        // Flip depth vertically
+        for (int y = 0; y < 800; ++y) {
+            std::memcpy(
+                depth_msg.data.data() + y * 800 * sizeof(float),
+                depth + (799 - y) * 800,
+                800 * sizeof(float)
+            );
+        }
+
+        depth_pub->publish(depth_msg);
+
+
+
+        // Depth image message
+        auto camera_msg = sensor_msgs::msg::Image();
+        camera_msg.header.stamp = node->now();
+        camera_msg.header.frame_id = "camera";
+        camera_msg.height = 800;
+        camera_msg.width = 800;
+        camera_msg.encoding = "rgb8";
+        camera_msg.step = 800 * 3;
+        // Copy depth buffer to msg.data
+        camera_msg.data.resize(800 * 800 * 3);
+        for (int y = 0; y < 800; ++y) {
+            std::memcpy(
+                camera_msg.data.data() + y * 800 * 3,
+                rgb + (799 - y) * 800 * 3,
+                800 * 3
+            );
+        }
+
+        camera_pub->publish(camera_msg);
+    }
+
     // publish xpos + xquat
     {
-      std::vector<std::string> list_items = { "peg", "hole" };
+      std::vector<std::string> list_items = { "peg-red","peg-green", "hole" };
       auto pose_array = geometry_msgs::msg::PoseArray();
       pose_array.header.stamp = node->now();
       pose_array.header.frame_id = "world";

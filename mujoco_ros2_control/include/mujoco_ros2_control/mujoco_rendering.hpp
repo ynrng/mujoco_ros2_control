@@ -18,6 +18,7 @@ public:
   bool is_close_flag_raised();
   void update();
   void close();
+  void get_camera_buffer(unsigned char** rgb_buffer, float** depth_buffer);
 
 private:
   MujocoRendering();
@@ -46,6 +47,9 @@ private:
   bool button_right_;
   double lastx_;
   double lasty_;
+
+  unsigned char* rgb;
+  float* depth;
 };
 }  // namespace mujoco_ros2_control
 
